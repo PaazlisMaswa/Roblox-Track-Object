@@ -1,0 +1,172 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+if _G.MaswaTrackObject then return end
+_G.MaswaTrackObject=true
+
+local Players=game:GetService("Players")
+local StarterGui=game:GetService("StarterGui")
+local RunService=game:GetService("RunService")
+
+local LocalPlayer=Players.LocalPlayer
+local Character=LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+
+local ObjectFolder=workspace:FindFirstChild("Stars")
+local ObjectAdded,ObjectRemoved;
+
+function IsAlive(v)
+	return v and v.Parent and true or false
+end
+
+function Notify(title,description,duration)
+	StarterGui:SetCore("SendNotification",{
+		Title=title,
+		Text=description,
+		Duration=duration or 5
+	})
+end
+
+function Create(className,data,useCheck)
+	if useCheck then
+		for i,v in ipairs(data.Parent:GetChildren()) do
+			if v.ClassName==className and v.Name==data.Name then
+				return v
+			end
+		end
+	end
+	local obj=Instance.new(className)
+	obj.Name=data.Name or className
+	if className=="Beam" then
+		obj.Attachment0=data.Attachment0
+		obj.Attachment1=data.Attachment1
+		obj.Enabled=data.Enabled or true
+		if typeof(data.Color)=="Color3" then
+			obj.Color=ColorSequence.new(data.Color)
+		else
+			obj.Color=data.Color or ColorSequence.new(Color3.fromRGB(0,255,0))
+		end
+		obj.FaceCamera=data.FaceCamera or true
+		obj.Width0=data.Width0 or 0.1
+		obj.Width1=data.Width1 or 0.1
+		obj.Parent=data.Parent or data.Attachment0.Parent or data.Attachment1.Parent
+	else
+		for k,v in pairs(data) do obj[k]=v end
+	end
+	return obj
+end
+
+function GetRootPart(model)
+	local rootPart=model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso") or model.PrimaryPart if rootPart then  return rootPart end return nil
+end
+
+local RootPart=GetRootPart(Character)
+
+local Attachment0=Create("Attachment",{
+	Name="Attachment0",
+	Parent=RootPart
+})
+
+local ObjectCache={}
+
+function AddObject(v,parent)
+	local attachment1=Create("Attachment",{
+		Name="Attachment1",
+		Parent=parent
+	})
+	local beam=Create("Beam",{["Attachment0"]=Attachment0,["Attachment1"]=attachment1,["Parent"]=parent})
+	ObjectCache[v]={
+		Func=function()
+			beam:Destroy()
+			attachment1:Destroy()
+		end,
+	}
+end
+
+if not ObjectFolder then
+	repeat task.wait() until ObjectFolder~=nil
+end
+
+function Setup()
+	if next(ObjectCache) then
+		local k,v=next(ObjectCache)
+		while k and v do
+			v.Func()
+			ObjectCache[k]=nil
+			k,v=next(ObjectCache)
+		end
+	end
+	for i,v in ipairs(ObjectFolder:GetChildren()) do
+		if v:IsA("Model") and v.PrimaryPart then
+			AddObject(v,v.PrimaryPart)
+		end
+	end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+	task.wait(1)
+	Character=newCharacter
+	RootPart=GetRootPart(Character)
+	Attachment0=Create("Attachment",{
+		Name="Attachment0",
+		Parent=RootPart
+	})
+	Setup()
+end)
+
+if ObjectFolder then
+	Setup()
+	ObjectAdded=ObjectFolder.ChildAdded:Connect(function(child)
+		if child:IsA("Model") and child.PrimaryPart then
+			AddObject(child,child.PrimaryPart)
+		end
+	end)
+	ObjectAdded=ObjectFolder.ChildRemoved:Connect(function(child)
+		local objectData=ObjectCache[child]
+		if objectData then
+			objectData.Func()
+			ObjectCache[child]=nil
+		end
+	end)
+end
+
+workspace.DescendantAdded:Connect(function(v)
+	RunService.RenderStepped:Wait()
+	if IsAlive(v) and v:IsA("BoolValue") and v.Name=="SELECTED" and v.Value==true then
+		ObjectFolder=v.Parent
+		Setup()
+		if ObjectAdded then
+			ObjectAdded:Disconnect()
+			ObjectAdded=nil
+		end
+		ObjectAdded=ObjectFolder.ChildAdded:Connect(function(child)
+			if child:IsA("Model") and child.PrimaryPart then
+				AddObject(child,child.PrimaryPart)
+			elseif child:IsA("BasePart") then
+				AddObject(child,child)
+			end
+		end)
+		if ObjectRemoved then
+			ObjectRemoved:Disconnect()
+			ObjectRemoved=nil
+		end
+		ObjectAdded=ObjectFolder.ChildRemoved:Connect(function(child)
+			local objectData=ObjectCache[child]
+			if objectData then
+				objectData.Func()
+				ObjectCache[child]=nil
+			end
+		end)
+		Notify("Track Object","Track has successfully selected")
+	end
+end)
+
+Notify("Track Object","Track Object Loaded")
+
+task.delay(5,function()
+	Notify("Track Object",'1. Use dex / explorer')
+	task.wait(1)
+	Notify("Track Object",'2. Select the lighting')
+	task.wait(1)
+	Notify("Track Object",'3. name the class "BoolValue" > set name to "SELECTED" > set value to true')
+	task.wait(1)
+	Notify("Track Object",'4. Drag "SELECTED" to "select the folder or model you want in dex"')
+end)
